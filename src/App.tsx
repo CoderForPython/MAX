@@ -124,6 +124,13 @@ export default function App() {
         body: JSON.stringify({ username, password })
       });
       
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await res.text();
+        console.error('Non-JSON response received:', text);
+        throw new Error('Сервер вернул некорректный ответ. Попробуйте еще раз через несколько секунд.');
+      }
+
       const data = await res.json();
       
       if (res.ok) {

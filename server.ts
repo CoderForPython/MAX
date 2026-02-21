@@ -36,7 +36,18 @@ const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
+// Debug logger for ALL requests
+app.use((req, res, next) => {
+  console.log(`[DEBUG] ${new Date().toISOString()} - ${req.method} ${req.url}`);
+  next();
+});
+
 app.use(express.json());
+
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', time: new Date().toISOString() });
+});
 
 // Logging middleware
 app.use((req, res, next) => {
@@ -45,7 +56,8 @@ app.use((req, res, next) => {
 });
 
 // Auth Routes
-app.post('/api/signup', (req, res) => {
+console.log('Registering auth routes...');
+app.post(['/api/signup', '/api/signup/'], (req, res) => {
   const { username, password } = req.body;
   console.log(`Signup attempt for: ${username}`);
   try {
@@ -69,7 +81,7 @@ app.post('/api/signup', (req, res) => {
   }
 });
 
-app.post('/api/login', (req, res) => {
+app.post(['/api/login', '/api/login/'], (req, res) => {
   const { username, password } = req.body;
   console.log(`Login attempt for: ${username}`);
   try {
@@ -88,7 +100,7 @@ app.post('/api/login', (req, res) => {
   }
 });
 
-app.get('/api/users', (req, res) => {
+app.get(['/api/users', '/api/users/'], (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
   try {
@@ -114,6 +126,14 @@ app.get('/api/messages/:otherId', (req, res) => {
     res.json(messages);
   } catch (e) {
     res.status(401).json({ error: 'Invalid token' });
+  }
+});
+
+// Global error handler
+app.use((err: any, req: any, res: any, next: any) => {
+  console.error('Express Global Error:', err);
+  if (!res.headersSent) {
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
