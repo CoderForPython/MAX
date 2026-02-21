@@ -38,28 +38,53 @@ const wss = new WebSocketServer({ server });
 
 app.use(express.json());
 
+// Logging middleware
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  next();
+});
+
 // Auth Routes
 app.post('/api/signup', (req, res) => {
   const { username, password } = req.body;
+  console.log(`Signup attempt for: ${username}`);
   try {
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password are required' });
+    }
     const hashedPassword = bcrypt.hashSync(password, 10);
     const avatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`;
     const info = db.prepare('INSERT INTO users (username, password, avatar) VALUES (?, ?, ?)').run(username, hashedPassword, avatar);
-    const token = jwt.sign({ id: info.lastInsertRowid, username }, JWT_SECRET);
-    res.json({ token, user: { id: info.lastInsertRowid, username, avatar } });
-  } catch (e) {
-    res.status(400).json({ error: 'Username already exists' });
+    const userId = Number(info.lastInsertRowid);
+    const token = jwt.sign({ id: userId, username }, JWT_SECRET);
+    console.log(`Signup successful for: ${username}, ID: ${userId}`);
+    res.json({ token, user: { id: userId, username, avatar } });
+  } catch (e: any) {
+    console.error('Signup error:', e);
+    if (e.code === 'SQLITE_CONSTRAINT') {
+      res.status(400).json({ error: 'Это имя пользователя уже занято' });
+    } else {
+      res.status(500).json({ error: 'Ошибка сервера при регистрации' });
+    }
   }
 });
 
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body;
-  const user: any = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
-  if (user && bcrypt.compareSync(password, user.password)) {
-    const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET);
-    res.json({ token, user: { id: user.id, username: user.username, avatar: user.avatar } });
-  } else {
-    res.status(401).json({ error: 'Invalid credentials' });
+  console.log(`Login attempt for: ${username}`);
+  try {
+    const user: any = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+    if (user && bcrypt.compareSync(password, user.password)) {
+      const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET);
+      console.log(`Login successful for: ${username}`);
+      res.json({ token, user: { id: user.id, username: user.username, avatar: user.avatar } });
+    } else {
+      console.log(`Login failed for: ${username} - Invalid credentials`);
+      res.status(401).json({ error: 'Неверное имя пользователя или пароль' });
+    }
+  } catch (e) {
+    console.error('Login error:', e);
+    res.status(500).json({ error: 'Ошибка сервера при входе' });
   }
 });
 

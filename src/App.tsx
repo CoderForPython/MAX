@@ -21,6 +21,7 @@ export default function App() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -46,70 +47,99 @@ export default function App() {
   }, [messages]);
 
   const connectWs = () => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const socket = new WebSocket(`${protocol}//${window.location.host}`);
-    
-    socket.onopen = () => {
-      socket.send(JSON.stringify({ type: 'auth', token: localStorage.getItem('token') }));
-    };
+    try {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const socket = new WebSocket(`${protocol}//${window.location.host}`);
+      
+      socket.onopen = () => {
+        console.log('WS Connected');
+        socket.send(JSON.stringify({ type: 'auth', token: localStorage.getItem('token') }));
+      };
 
-    socket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === 'message') {
-        const msg = data.message;
-        setMessages(prev => {
-          // Avoid duplicates
-          if (prev.some(m => m.id === msg.id)) return prev;
-          return [...prev, msg];
-        });
-      }
-    };
+      socket.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'message') {
+          const msg = data.message;
+          setMessages(prev => {
+            // Avoid duplicates
+            if (prev.some(m => m.id === msg.id)) return prev;
+            return [...prev, msg];
+          });
+        }
+      };
 
-    socket.onclose = () => {
-      setTimeout(connectWs, 3000);
-    };
+      socket.onclose = () => {
+        console.log('WS Disconnected, retrying...');
+        setTimeout(connectWs, 3000);
+      };
 
-    setWs(socket);
+      socket.onerror = (err) => {
+        console.error('WS Error:', err);
+      };
+
+      setWs(socket);
+    } catch (e) {
+      console.error('Failed to connect WS:', e);
+    }
   };
 
   const fetchUsers = async () => {
-    const res = await fetch('/api/users', {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    if (res.ok) {
-      const data = await res.json();
-      setUsers(data);
+    try {
+      const res = await fetch('/api/users', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUsers(data);
+      }
+    } catch (e) {
+      console.error('Fetch users error:', e);
     }
   };
 
   const fetchMessages = async (otherId: number) => {
-    const res = await fetch(`/api/messages/${otherId}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    if (res.ok) {
-      const data = await res.json();
-      setMessages(data);
+    try {
+      const res = await fetch(`/api/messages/${otherId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMessages(data);
+      }
+    } catch (e) {
+      console.error('Fetch messages error:', e);
     }
   };
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    const endpoint = authMode === 'login' ? '/api/login' : '/api/signup';
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
-    });
-    const data = await res.json();
-    if (res.ok) {
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify(data.user));
-      setToken(data.token);
-      setUser(data.user);
-      setIsAuthOpen(false);
-    } else {
-      setError(data.error);
+    setIsLoading(true);
+    
+    try {
+      const endpoint = authMode === 'login' ? '/api/login' : '/api/signup';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      
+      const data = await res.json();
+      
+      if (res.ok) {
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        setToken(data.token);
+        setUser(data.user);
+        setIsAuthOpen(false);
+      } else {
+        setError(data.error || 'Произошла ошибка при входе');
+      }
+    } catch (err) {
+      console.error('Auth request failed:', err);
+      setError('Не удалось связаться с сервером. Проверьте интернет-соединение.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -162,9 +192,10 @@ export default function App() {
               <input
                 type="text"
                 placeholder="Имя пользователя"
-                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/30 transition-all"
+                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/30 transition-all disabled:opacity-50"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
+                disabled={isLoading}
                 required
               />
             </div>
@@ -172,18 +203,35 @@ export default function App() {
               <input
                 type="password"
                 placeholder="Пароль"
-                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/30 transition-all"
+                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/30 transition-all disabled:opacity-50"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                disabled={isLoading}
                 required
               />
             </div>
-            {error && <p className="text-red-400 text-sm">{error}</p>}
+            {error && (
+              <motion.p 
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="text-red-400 text-sm text-center font-medium bg-red-400/10 py-2 rounded-lg border border-red-400/20"
+              >
+                {error}
+              </motion.p>
+            )}
             <button
               type="submit"
-              className="w-full py-3 bg-white text-indigo-600 font-bold rounded-xl hover:bg-white/90 transition-all active:scale-95"
+              disabled={isLoading}
+              className="w-full py-3 bg-white text-indigo-600 font-bold rounded-xl hover:bg-white/90 transition-all active:scale-95 disabled:opacity-50 disabled:scale-100 flex items-center justify-center gap-2"
             >
-              {authMode === 'login' ? 'Войти' : 'Создать аккаунт'}
+              {isLoading ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                  Подождите...
+                </>
+              ) : (
+                authMode === 'login' ? 'Войти' : 'Создать аккаунт'
+              )}
             </button>
           </form>
 
