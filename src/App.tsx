@@ -199,6 +199,7 @@ export default function App() {
               <input
                 type="text"
                 placeholder="Имя пользователя"
+                autoComplete="username"
                 className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/30 transition-all disabled:opacity-50"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -210,6 +211,7 @@ export default function App() {
               <input
                 type="password"
                 placeholder="Пароль"
+                autoComplete={authMode === 'login' ? 'current-password' : 'new-password'}
                 className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/30 transition-all disabled:opacity-50"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

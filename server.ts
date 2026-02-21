@@ -194,10 +194,9 @@ async function initVite() {
       res.sendFile(path.join(__dirname, 'dist', 'index.html'));
     });
   }
-
-  server.listen(3000, '0.0.0.0', () => {
-    console.log('Server running on http://localhost:3000');
-  });
 }
 
-initVite();
+server.listen(3000, '0.0.0.0', () => {
+  console.log('Server running on http://localhost:3000');
+  initVite().catch(console.error);
+});
